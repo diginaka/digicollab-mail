@@ -1,0 +1,19 @@
+{
+  "orgId": "ur6j6",
+  "appId": "knzmb92rhhhfxcxf",
+  "env": "prod",
+  "features": [
+    {
+      "id": "gh5hezrmfghpffos",
+      "path": ".",
+      "dev": {
+        "command": "npm run dev"
+      },
+      "build": {
+        "command": "npm run build",
+        "outputDir": "dist"
+      }
+    }
+  ],
+  "firstFeatureSub": "digicollab-mail"
+}

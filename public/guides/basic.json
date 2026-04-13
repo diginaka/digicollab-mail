@@ -1,0 +1,78 @@
+{
+  "title": "デジコラボ メール — 基本操作ガイド",
+  "description": "MailerLite APIキーを設定して、登録者管理からキャンペーン配信までを体験してみましょう。",
+  "steps": [
+    {
+      "target": "[data-nav=\"dashboard\"]",
+      "title": "ダッシュボード",
+      "content": "まずはここから。接続後は登録者数・配信数・開封率などが一目で見られます。",
+      "placement": "right"
+    },
+    {
+      "target": "[data-nav=\"settings\"]",
+      "title": "最初に「設定」を開きましょう",
+      "content": "MailerLiteを使うにはAPIキーが必要です。設定画面から接続しましょう。",
+      "placement": "right"
+    },
+    {
+      "target": "[data-setup-guide]",
+      "title": "APIキーの取得方法",
+      "content": "MailerLiteの無料アカウント（500人まで無料）にログインして、Integrations → MailerLite API から「Generate new token」でAPIキーを発行します。",
+      "placement": "bottom"
+    },
+    {
+      "target": "[data-api-key-input]",
+      "title": "APIキーを貼り付け",
+      "content": "発行したAPIキーをここに貼り付けてください。キーはご自身のブラウザにだけ保存されます。",
+      "placement": "bottom"
+    },
+    {
+      "target": "[data-test-connection]",
+      "title": "接続テスト",
+      "content": "「接続テスト」ボタンを押してMailerLiteと通信できるか確認します。成功するとアカウント名が表示されます。",
+      "placement": "bottom"
+    },
+    {
+      "target": "[data-nav=\"subscribers\"]",
+      "title": "登録者管理",
+      "content": "接続できたら、ここで登録者（メール購読者）の一覧・検索・追加・削除ができます。",
+      "placement": "right"
+    },
+    {
+      "target": "[data-nav=\"groups\"]",
+      "title": "グループ＆セグメント",
+      "content": "登録者をグループに分けて管理できます。配信先ごとにグループを作りましょう。",
+      "placement": "right"
+    },
+    {
+      "target": "[data-nav=\"campaigns\"]",
+      "title": "キャンペーン管理",
+      "content": "メール配信（キャンペーン）を作成・スケジュールします。本文のデザインはMailerLite本体のエディタで行ってください。",
+      "placement": "right"
+    },
+    {
+      "target": "[data-nav=\"reports\"]",
+      "title": "配信レポート",
+      "content": "送信済みキャンペーンの開封率・クリック率を確認できます。CSV出力も可能です。",
+      "placement": "right"
+    },
+    {
+      "target": "[data-nav=\"automations\"]",
+      "title": "オートメーション",
+      "content": "ステップメール（自動配信）の一覧と状態を確認できます。作成はMailerLite本体で行います。",
+      "placement": "right"
+    },
+    {
+      "target": "[data-connection-status]",
+      "title": "接続ステータス",
+      "content": "画面右上でMailerLiteとの接続状況がいつでも確認できます。緑なら接続OKです。",
+      "placement": "bottom"
+    },
+    {
+      "target": "[data-content-area]",
+      "title": "準備完了！",
+      "content": "これで基本操作は完了です。まずは設定画面からAPIキーを接続して、登録者管理から始めてみましょう。",
+      "placement": "left"
+    }
+  ]
+}
