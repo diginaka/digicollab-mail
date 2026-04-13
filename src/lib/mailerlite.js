@@ -55,9 +55,18 @@ export async function mlFetch(apiKey, endpoint, options = {}) {
 }
 
 // ==== アカウント ====
-export function getAccount(apiKey) {
-  // MailerLite API: /me エンドポイントでアカウント情報取得
-  return mlFetch(apiKey, '/me')
+export async function getAccount(apiKey) {
+  // MailerLite新API: /subscribers?limit=1 で接続確認＆総数取得
+  const resp = await mlFetch(apiKey, '/subscribers?limit=1')
+  return {
+    data: {
+      account_name: 'MailerLite アカウント',
+      email: resp.data?.[0]?.email || '',
+      subscribers_limit: resp.total || resp.meta?.total || 0,
+      plan: 'free',
+      total_subscribers: resp.total || resp.meta?.total || 0,
+    },
+  }
 }
 
 // ==== 登録者 ====

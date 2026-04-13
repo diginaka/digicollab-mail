@@ -31,7 +31,7 @@ export default function Settings({ connection, setConnection, userTier, setUserT
       })
       setTestResult({
         ok: true,
-        message: `接続成功！ ${account.account_name || account.email || 'アカウント'} と接続しました。`,
+        message: `接続成功！ 登録者数: ${account.total_subscribers || 0}人`,
       })
     } catch (err) {
       setTestResult({ ok: false, message: `接続失敗: ${err.message}` })
