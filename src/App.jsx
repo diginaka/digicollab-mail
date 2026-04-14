@@ -1,43 +1,48 @@
 import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, Users, FolderTree, Send, BarChart3, Workflow,
-  Settings as SettingsIcon, ChevronLeft, ChevronRight, Mail, CheckCircle2, XCircle, Circle,
+  Settings as SettingsIcon, ChevronLeft, ChevronRight, Mail, CheckCircle2, Circle,
 } from 'lucide-react'
 import { localStore, isSupabaseMode } from './lib/supabase'
-import AIContentCopyBar from './components/AIContentCopyBar'
+import AutoDeliveryPanel from './components/AutoDeliveryPanel'
 import Dashboard from './pages/Dashboard'
 import Subscribers from './pages/Subscribers'
 import Groups from './pages/Groups'
 import Campaigns from './pages/Campaigns'
 import Reports from './pages/Reports'
-import Automations from './pages/Automations'
+import Sequences from './pages/Sequences'
 import Settings from './pages/Settings'
 
 const NAV = [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
-  { id: 'subscribers', label: '登録者管理', icon: Users },
-  { id: 'groups', label: 'グループ', icon: FolderTree },
+  { id: 'subscribers', label: 'コンタクト管理', icon: Users },
+  { id: 'groups', label: 'リスト', icon: FolderTree },
   { id: 'campaigns', label: 'キャンペーン', icon: Send },
   { id: 'reports', label: '配信レポート', icon: BarChart3 },
-  { id: 'automations', label: 'オートメーション', icon: Workflow },
+  { id: 'sequences', label: 'シーケンス', icon: Workflow },
   { id: 'settings', label: '設定', icon: SettingsIcon },
 ]
 
 const DEFAULT_CONNECTION = {
   apiKey: '',
   accountName: '',
+  email: '',
   planName: '',
-  subscriberLimit: 0,
+  credits: 0,
+  creditsType: '',
   isConnected: false,
   lastVerifiedAt: null,
+  defaultSenderEmail: '',
+  defaultSenderName: '',
 }
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [collapsed, setCollapsed] = useState(false)
-  const [connection, setConnection] = useState(() =>
-    localStore.get('connection', DEFAULT_CONNECTION)
-  )
+  const [connection, setConnection] = useState(() => ({
+    ...DEFAULT_CONNECTION,
+    ...localStore.get('connection', {}),
+  }))
   // ティア: Supabase連携モード時は member から（本番は認証で取得）
   // スタンドアロンモード時は partner（全機能アンロック）
   const [userTier, setUserTier] = useState(() =>
@@ -68,7 +73,7 @@ export default function App() {
     groups: <Groups {...pageProps} />,
     campaigns: <Campaigns {...pageProps} />,
     reports: <Reports {...pageProps} />,
-    automations: <Automations {...pageProps} />,
+    sequences: <Sequences {...pageProps} />,
     settings: (
       <Settings
         connection={connection}
@@ -96,7 +101,7 @@ export default function App() {
           {!collapsed && (
             <div className="ml-3 min-w-0">
               <div className="text-white font-bold text-sm truncate">デジコラボ メール</div>
-              <div className="text-white/50 text-[10px]">BYOK方式</div>
+              <div className="text-white/50 text-[10px]">Brevo連携</div>
             </div>
           )}
         </div>
@@ -175,14 +180,14 @@ export default function App() {
                 <Circle className="w-3 h-3" />
               )}
               {isConnected
-                ? `MailerLite接続済 ${connection.accountName ? `(${connection.accountName})` : ''}`
-                : 'MailerLite未接続'}
+                ? `Brevo接続済 ${connection.accountName ? `(${connection.accountName})` : ''}`
+                : 'Brevo未接続'}
             </span>
           </div>
         </header>
 
-        {/* AI生成コンテンツコピーバー（フロービルダーから開かれた時のみ表示） */}
-        <AIContentCopyBar />
+        {/* 自動配信パネル（フロービルダーから開かれた時のみ表示） */}
+        <AutoDeliveryPanel connection={connection} isConnected={isConnected} />
 
         {/* コンテンツエリア */}
         <main className="content-area" data-content-area>

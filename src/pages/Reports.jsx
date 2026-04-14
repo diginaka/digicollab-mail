@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BarChart3, Loader2, Download, AlertCircle, Mail, MousePointerClick, Send, UserMinus } from 'lucide-react'
-import { listCampaigns, getCampaign } from '../lib/mailerlite'
+import { listCampaigns, getCampaign } from '../lib/brevo'
 import { canUse } from '../lib/tiers'
 import { NotConnected } from './Dashboard'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -22,9 +22,10 @@ export default function Reports({ isConnected, connection, userTier, setCurrentP
 
   const loadList = async () => {
     try {
-      const resp = await listCampaigns(connection.apiKey, { limit: 50, status: 'sent' })
-      setCampaigns(resp.data || [])
-      if (resp.data && resp.data.length > 0) setSelectedId(resp.data[0].id)
+      const resp = await listCampaigns(connection.apiKey, { type: 'classic', status: 'sent', limit: 50 })
+      const list = resp?.campaigns || []
+      setCampaigns(list)
+      if (list.length > 0) setSelectedId(list[0].id)
     } catch (err) {
       setError(err.message)
     }
@@ -35,7 +36,7 @@ export default function Reports({ isConnected, connection, userTier, setCurrentP
     setError('')
     try {
       const resp = await getCampaign(connection.apiKey, id)
-      setDetail(resp.data || resp)
+      setDetail(resp)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -43,44 +44,60 @@ export default function Reports({ isConnected, connection, userTier, setCurrentP
     }
   }
 
+  if (!isConnected) return <NotConnected setCurrentPage={setCurrentPage} />
+
+  const gs = detail?.statistics?.globalStats || {}
+  const sent = Number(gs.sent || 0)
+  const delivered = Number(gs.delivered || 0)
+  const uniqueOpens = Number(gs.uniqueViews || gs.viewed || 0)
+  const uniqueClicks = Number(gs.uniqueClicks || gs.clickers || 0)
+  const unsubscribed = Number(gs.unsubscribed || gs.unsubscriptions || 0)
+  const hardBounces = Number(gs.hardBounces || 0)
+  const softBounces = Number(gs.softBounces || 0)
+  const complaints = Number(gs.complaints || 0)
+
+  const openRate = delivered ? (uniqueOpens / delivered) * 100 : 0
+  const clickRate = delivered ? (uniqueClicks / delivered) * 100 : 0
+  const unsubRate = delivered ? (unsubscribed / delivered) * 100 : 0
+
+  const chartData = [
+    { name: '送信', 件数: sent },
+    { name: '到達', 件数: delivered },
+    { name: '開封', 件数: uniqueOpens },
+    { name: 'クリック', 件数: uniqueClicks },
+    { name: '解除', 件数: unsubscribed },
+  ]
+
   const exportCSV = () => {
     if (!detail) return
+    const sender = detail.sender || {}
     const rows = [
       ['項目', '値'],
       ['キャンペーン名', detail.name || ''],
-      ['件名', detail.emails?.[0]?.subject || ''],
-      ['送信日時', detail.finished_at || ''],
-      ['送信数', detail.stats?.sent || 0],
-      ['開封数', detail.stats?.opens_count || 0],
-      ['開封率', `${Number(detail.stats?.open_rate?.float || detail.stats?.open_rate || 0).toFixed(2)}%`],
-      ['クリック数', detail.stats?.clicks_count || 0],
-      ['クリック率', `${Number(detail.stats?.click_rate?.float || detail.stats?.click_rate || 0).toFixed(2)}%`],
-      ['解除数', detail.stats?.unsubscribes_count || 0],
+      ['件名', detail.subject || ''],
+      ['送信元', `${sender.name || ''} <${sender.email || ''}>`],
+      ['送信日時', detail.sentDate || ''],
+      ['送信数', sent],
+      ['到達数', delivered],
+      ['開封数', uniqueOpens],
+      ['開封率', `${openRate.toFixed(2)}%`],
+      ['クリック数', uniqueClicks],
+      ['クリック率', `${clickRate.toFixed(2)}%`],
+      ['解除数', unsubscribed],
+      ['解除率', `${unsubRate.toFixed(2)}%`],
+      ['ハードバウンス', hardBounces],
+      ['ソフトバウンス', softBounces],
+      ['苦情', complaints],
     ]
     const csv = rows.map((r) => r.map((v) => `"${v}"`).join(',')).join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `campaign-${detail.id}.csv`
+    a.download = `brevo-campaign-${detail.id}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
-
-  if (!isConnected) return <NotConnected setCurrentPage={setCurrentPage} />
-
-  const s = detail?.stats || {}
-  const openRate = Number(s.open_rate?.float || s.open_rate || 0)
-  const clickRate = Number(s.click_rate?.float || s.click_rate || 0)
-  const unsubRate = Number(s.unsubscribe_rate?.float || s.unsubscribe_rate || 0)
-  const sent = s.sent || 0
-
-  const chartData = [
-    { name: '送信', 件数: sent, color: '#94a3b8' },
-    { name: '開封', 件数: s.opens_count || 0, color: '#059669' },
-    { name: 'クリック', 件数: s.clicks_count || 0, color: '#2563eb' },
-    { name: '解除', 件数: s.unsubscribes_count || 0, color: '#dc2626' },
-  ]
 
   return (
     <div className="p-6 max-w-6xl mx-auto" data-page="reports">
@@ -103,7 +120,7 @@ export default function Reports({ isConnected, connection, userTier, setCurrentP
           {campaigns.length === 0 && <option>送信済みキャンペーンがありません</option>}
           {campaigns.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name || c.subject || '無題'} — {c.finished_at ? new Date(c.finished_at).toLocaleDateString('ja-JP') : ''}
+              {c.name || c.subject || '無題'} — {c.sentDate ? new Date(c.sentDate).toLocaleDateString('ja-JP') : ''}
             </option>
           ))}
         </select>
@@ -131,25 +148,25 @@ export default function Reports({ isConnected, connection, userTier, setCurrentP
         <>
           {/* レポートカード */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <ReportCard icon={Send} label="送信数" value={sent.toLocaleString()} sub="" color="#94a3b8" />
+            <ReportCard icon={Send} label="送信 / 到達" value={delivered.toLocaleString()} sub={`送信 ${sent.toLocaleString()}`} color="#94a3b8" />
             <ReportCard
               icon={Mail}
-              label="開封数"
-              value={(s.opens_count || 0).toLocaleString()}
+              label="開封数（ユニーク）"
+              value={uniqueOpens.toLocaleString()}
               sub={`${openRate.toFixed(1)}%`}
               color="#059669"
             />
             <ReportCard
               icon={MousePointerClick}
-              label="クリック数"
-              value={(s.clicks_count || 0).toLocaleString()}
+              label="クリック（ユニーク）"
+              value={uniqueClicks.toLocaleString()}
               sub={`${clickRate.toFixed(1)}%`}
               color="#2563eb"
             />
             <ReportCard
               icon={UserMinus}
-              label="解除数"
-              value={(s.unsubscribes_count || 0).toLocaleString()}
+              label="配信停止"
+              value={unsubscribed.toLocaleString()}
               sub={`${unsubRate.toFixed(1)}%`}
               color="#dc2626"
             />
@@ -171,14 +188,40 @@ export default function Reports({ isConnected, connection, userTier, setCurrentP
             </div>
           </div>
 
+          {/* バウンス・苦情 */}
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <MiniStat label="ハードバウンス" value={hardBounces.toLocaleString()} color="#dc2626" />
+            <MiniStat label="ソフトバウンス" value={softBounces.toLocaleString()} color="#d97706" />
+            <MiniStat label="苦情（スパム報告）" value={complaints.toLocaleString()} color="#7c3aed" />
+          </div>
+
           {/* 詳細情報 */}
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <h3 className="text-sm font-bold text-slate-800 mb-3">キャンペーン詳細</h3>
             <dl className="text-sm space-y-2">
-              <Row label="件名" value={detail.emails?.[0]?.subject || detail.subject || '—'} />
-              <Row label="送信元" value={`${detail.emails?.[0]?.from_name || ''} <${detail.emails?.[0]?.from || ''}>`} />
-              <Row label="送信完了" value={detail.finished_at ? new Date(detail.finished_at).toLocaleString('ja-JP') : '—'} />
-              <Row label="配信先" value={`${detail.delivery_schedule || '—'}`} />
+              <Row label="キャンペーン名" value={detail.name || '—'} />
+              <Row label="件名" value={detail.subject || '—'} />
+              <Row
+                label="送信元"
+                value={`${detail.sender?.name || ''} <${detail.sender?.email || ''}>`}
+              />
+              <Row
+                label="返信先"
+                value={detail.replyTo || '—'}
+              />
+              <Row
+                label="送信完了"
+                value={detail.sentDate ? new Date(detail.sentDate).toLocaleString('ja-JP') : '—'}
+              />
+              <Row
+                label="対象リスト"
+                value={
+                  Array.isArray(detail.recipients?.lists) && detail.recipients.lists.length > 0
+                    ? detail.recipients.lists.join(', ')
+                    : '—'
+                }
+              />
+              <Row label="ステータス" value={detail.status || '—'} />
             </dl>
           </div>
         </>
@@ -200,6 +243,17 @@ function ReportCard({ icon: Icon, label, value, sub, color }) {
           {sub}
         </div>
       )}
+    </div>
+  )
+}
+
+function MiniStat({ label, value, color }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4">
+      <div className="text-xs text-slate-500 mb-1">{label}</div>
+      <div className="text-xl font-bold" style={{ color }}>
+        {value}
+      </div>
     </div>
   )
 }

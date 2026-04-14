@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Users, Send, Mail, MousePointerClick, AlertCircle, ExternalLink, Plus, UserPlus, Loader2 } from 'lucide-react'
-import { listSubscribers, listCampaigns } from '../lib/mailerlite'
+import { listContacts, listCampaigns, getAggregatedReport } from '../lib/brevo'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function Dashboard({ isConnected, connection, setCurrentPage }) {
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState({
-    totalSubscribers: 0,
+    totalContacts: 0,
     sentThisMonth: 0,
     avgOpenRate: 0,
     avgClickRate: 0,
@@ -24,36 +24,58 @@ export default function Dashboard({ isConnected, connection, setCurrentPage }) {
     setLoading(true)
     setError('')
     try {
-      const [subsResp, sentResp] = await Promise.all([
-        listSubscribers(connection.apiKey, { limit: 1 }),
-        listCampaigns(connection.apiKey, { limit: 10, status: 'sent' }),
+      const [contactsResp, sentResp, aggResp] = await Promise.all([
+        listContacts(connection.apiKey, { limit: 1, offset: 0 }),
+        listCampaigns(connection.apiKey, { type: 'classic', status: 'sent', limit: 10 }),
+        getAggregatedReport(connection.apiKey, { days: 30 }).catch(() => null),
       ])
-      const recent = sentResp.data || []
-      const openRates = recent.map((c) => Number(c.stats?.open_rate?.float || c.stats?.open_rate || 0))
-      const clickRates = recent.map((c) => Number(c.stats?.click_rate?.float || c.stats?.click_rate || 0))
-      const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0)
+
+      const recent = sentResp?.campaigns || []
       const now = new Date()
       const thisMonth = now.getMonth()
       const sentThisMonth = recent.filter((c) => {
-        const d = new Date(c.finished_at || c.scheduled_for || c.created_at)
+        const src = c.sentDate || c.scheduledAt || c.modifiedAt || c.createdAt
+        if (!src) return false
+        const d = new Date(src)
         return d.getMonth() === thisMonth && d.getFullYear() === now.getFullYear()
       }).length
 
-      // 過去30日のダミー増減グラフ（実際は登録者作成日でグループ化が必要）
+      // 開封率・クリック率を aggregatedReport もしくはキャンペーン個別stats から算出
+      let avgOpenRate = 0
+      let avgClickRate = 0
+      if (aggResp && aggResp.delivered) {
+        avgOpenRate = (Number(aggResp.uniqueOpens || aggResp.opens || 0) / Number(aggResp.delivered)) * 100
+        avgClickRate = (Number(aggResp.uniqueClicks || aggResp.clicks || 0) / Number(aggResp.delivered)) * 100
+      } else {
+        const rates = recent.map((c) => {
+          const st = c.statistics?.globalStats || {}
+          const deliv = Number(st.delivered || 0)
+          return {
+            open: deliv ? (Number(st.uniqueViews || 0) / deliv) * 100 : 0,
+            click: deliv ? (Number(st.uniqueClicks || 0) / deliv) * 100 : 0,
+          }
+        })
+        if (rates.length > 0) {
+          avgOpenRate = rates.reduce((a, r) => a + r.open, 0) / rates.length
+          avgClickRate = rates.reduce((a, r) => a + r.click, 0) / rates.length
+        }
+      }
+
+      // 過去30日のダミー増減グラフ（実データはaggregatedReportに日次がないためイベントAPIが必要）
       const growth = Array.from({ length: 30 }, (_, i) => {
         const d = new Date()
         d.setDate(d.getDate() - (29 - i))
         return {
           date: `${d.getMonth() + 1}/${d.getDate()}`,
-          新規登録: Math.floor(Math.random() * 5),
+          新規登録: 0,
         }
       })
 
       setStats({
-        totalSubscribers: subsResp.total || subsResp.meta?.total || 0,
+        totalContacts: contactsResp?.count ?? 0,
         sentThisMonth,
-        avgOpenRate: Math.round(avg(openRates) * 100) / 100,
-        avgClickRate: Math.round(avg(clickRates) * 100) / 100,
+        avgOpenRate: Math.round(avgOpenRate * 100) / 100,
+        avgClickRate: Math.round(avgClickRate * 100) / 100,
         recentCampaigns: recent.slice(0, 5),
         subscriberGrowth: growth,
       })
@@ -79,7 +101,7 @@ export default function Dashboard({ isConnected, connection, setCurrentPage }) {
 
       {/* サマリーカード */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard icon={Users} label="総登録者数" value={stats.totalSubscribers.toLocaleString()} color="#059669" />
+        <StatCard icon={Users} label="総コンタクト数" value={stats.totalContacts.toLocaleString()} color="#059669" />
         <StatCard icon={Send} label="今月の配信数" value={stats.sentThisMonth} color="#2563eb" />
         <StatCard icon={Mail} label="平均開封率" value={`${stats.avgOpenRate}%`} color="#d97706" />
         <StatCard icon={MousePointerClick} label="平均クリック率" value={`${stats.avgClickRate}%`} color="#7c3aed" />
@@ -87,10 +109,10 @@ export default function Dashboard({ isConnected, connection, setCurrentPage }) {
 
       {/* クイックアクション */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-        <QuickAction icon={UserPlus} label="登録者を追加" onClick={() => setCurrentPage('subscribers')} />
+        <QuickAction icon={UserPlus} label="コンタクトを追加" onClick={() => setCurrentPage('subscribers')} />
         <QuickAction icon={Plus} label="新しいキャンペーン" onClick={() => setCurrentPage('campaigns')} />
         <a
-          href="https://app.mailerlite.com"
+          href="https://app.brevo.com"
           target="_blank"
           rel="noreferrer"
           className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-3 hover:border-emerald-300 hover:shadow-sm transition-all"
@@ -98,13 +120,13 @@ export default function Dashboard({ isConnected, connection, setCurrentPage }) {
           <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
             <ExternalLink className="w-5 h-5 text-emerald-600" />
           </div>
-          <div className="text-sm font-bold text-slate-800">MailerLiteを開く</div>
+          <div className="text-sm font-bold text-slate-800">Brevoを開く</div>
         </a>
       </div>
 
       {/* 登録者増減グラフ */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6" data-growth-chart>
-        <h2 className="text-base font-bold text-slate-800 mb-4">過去30日の新規登録者数</h2>
+        <h2 className="text-base font-bold text-slate-800 mb-4">過去30日の新規コンタクト推移</h2>
         <div className="h-64">
           {loading ? (
             <div className="h-full flex items-center justify-center text-slate-400">
@@ -135,30 +157,32 @@ export default function Dashboard({ isConnected, connection, setCurrentPage }) {
           <div className="py-8 text-center text-slate-400 text-sm">まだ送信済みキャンペーンがありません</div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {stats.recentCampaigns.map((c) => (
-              <div key={c.id} className="py-3 flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-slate-800 truncate">{c.name || c.subject || '無題'}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    {c.finished_at ? new Date(c.finished_at).toLocaleString('ja-JP') : '送信日不明'}
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 text-xs ml-4">
-                  <div>
-                    <div className="text-slate-400">開封</div>
-                    <div className="font-bold text-emerald-600">
-                      {Number(c.stats?.open_rate?.float || c.stats?.open_rate || 0).toFixed(1)}%
+            {stats.recentCampaigns.map((c) => {
+              const st = c.statistics?.globalStats || {}
+              const deliv = Number(st.delivered || 0)
+              const openRate = deliv ? (Number(st.uniqueViews || 0) / deliv) * 100 : 0
+              const clickRate = deliv ? (Number(st.uniqueClicks || 0) / deliv) * 100 : 0
+              return (
+                <div key={c.id} className="py-3 flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-slate-800 truncate">{c.name || c.subject || '無題'}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {c.sentDate ? new Date(c.sentDate).toLocaleString('ja-JP') : '送信日不明'}
                     </div>
                   </div>
-                  <div>
-                    <div className="text-slate-400">クリック</div>
-                    <div className="font-bold text-blue-600">
-                      {Number(c.stats?.click_rate?.float || c.stats?.click_rate || 0).toFixed(1)}%
+                  <div className="flex items-center gap-4 text-xs ml-4">
+                    <div>
+                      <div className="text-slate-400">開封</div>
+                      <div className="font-bold text-emerald-600">{openRate.toFixed(1)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400">クリック</div>
+                      <div className="font-bold text-blue-600">{clickRate.toFixed(1)}%</div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -199,11 +223,11 @@ export function NotConnected({ setCurrentPage }) {
     <div className="p-6 max-w-3xl mx-auto">
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center" data-not-connected>
         <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-        <h2 className="text-lg font-bold text-slate-800 mb-2">MailerLiteに接続してください</h2>
+        <h2 className="text-lg font-bold text-slate-800 mb-2">Brevoに接続してください</h2>
         <p className="text-sm text-slate-600 mb-5">
-          このツールを使うには、まずMailerLiteのAPIキーを設定する必要があります。
+          このツールを使うには、まずBrevoのAPIキーを設定する必要があります。
           <br />
-          無料アカウントでOK。設定画面から接続しましょう。
+          無料アカウントでOK（コンタクト無制限・300通/日）。設定画面から接続しましょう。
         </p>
         <button
           onClick={() => setCurrentPage('settings')}

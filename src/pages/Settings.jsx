@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Key, CheckCircle2, XCircle, ExternalLink, Info, Eye, EyeOff, Loader2, Unlink } from 'lucide-react'
-import { getAccount } from '../lib/mailerlite'
+import { useEffect, useState } from 'react'
+import { Key, CheckCircle2, XCircle, ExternalLink, Info, Eye, EyeOff, Loader2, Unlink, Mail } from 'lucide-react'
+import { getAccount, listSenders } from '../lib/brevo'
 import { isSupabaseMode } from '../lib/supabase'
 import { TIER_LABELS } from '../lib/tiers'
 
@@ -10,6 +10,26 @@ export default function Settings({ connection, setConnection, userTier, setUserT
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
   const [showGuide, setShowGuide] = useState(false)
+  const [senders, setSenders] = useState([])
+  const [loadingSenders, setLoadingSenders] = useState(false)
+
+  useEffect(() => {
+    if (connection.isConnected && connection.apiKey) {
+      loadSenders()
+    }
+  }, [connection.isConnected, connection.apiKey])
+
+  const loadSenders = async () => {
+    setLoadingSenders(true)
+    try {
+      const resp = await listSenders(connection.apiKey)
+      setSenders(resp?.senders || [])
+    } catch {
+      setSenders([])
+    } finally {
+      setLoadingSenders(false)
+    }
+  }
 
   const testConnection = async () => {
     if (!apiKeyInput) {
@@ -19,19 +39,22 @@ export default function Settings({ connection, setConnection, userTier, setUserT
     setTesting(true)
     setTestResult(null)
     try {
-      const resp = await getAccount(apiKeyInput)
-      const account = resp.data || resp
+      const account = await getAccount(apiKeyInput)
       setConnection({
         apiKey: apiKeyInput,
-        accountName: account.account_name || account.name || account.email || 'MailerLite アカウント',
-        planName: account.plan || account.subscription?.plan || 'free',
-        subscriberLimit: account.subscribers_limit || 500,
+        accountName: account.account_name,
+        email: account.email,
+        planName: account.plan,
+        credits: account.credits,
+        creditsType: account.creditsType,
         isConnected: true,
         lastVerifiedAt: new Date().toISOString(),
+        defaultSenderEmail: connection.defaultSenderEmail || '',
+        defaultSenderName: connection.defaultSenderName || '',
       })
       setTestResult({
         ok: true,
-        message: `接続成功！ 登録者数: ${account.total_subscribers || 0}人`,
+        message: `接続成功！ プラン: ${account.plan}${account.credits ? ` / クレジット: ${account.credits.toLocaleString()}` : ''}`,
       })
     } catch (err) {
       setTestResult({ ok: false, message: `接続失敗: ${err.message}` })
@@ -42,17 +65,35 @@ export default function Settings({ connection, setConnection, userTier, setUserT
   }
 
   const disconnect = () => {
-    if (!confirm('MailerLiteとの接続を解除しますか？APIキーが削除されます。')) return
+    if (!confirm('Brevoとの接続を解除しますか？APIキーが削除されます。')) return
     setApiKeyInput('')
     setConnection({
       apiKey: '',
       accountName: '',
+      email: '',
       planName: '',
-      subscriberLimit: 0,
+      credits: 0,
+      creditsType: '',
       isConnected: false,
       lastVerifiedAt: null,
+      defaultSenderEmail: '',
+      defaultSenderName: '',
     })
     setTestResult(null)
+    setSenders([])
+  }
+
+  const selectDefaultSender = (senderId) => {
+    const sender = senders.find((s) => String(s.id) === String(senderId))
+    if (!sender) {
+      setConnection({ ...connection, defaultSenderEmail: '', defaultSenderName: '' })
+      return
+    }
+    setConnection({
+      ...connection,
+      defaultSenderEmail: sender.email,
+      defaultSenderName: sender.name,
+    })
   }
 
   return (
@@ -64,15 +105,15 @@ export default function Settings({ connection, setConnection, userTier, setUserT
           <h3 className="font-bold text-yellow-900">初期セットアップ手順</h3>
         </div>
         <ol className="space-y-2 text-sm text-yellow-900 list-decimal list-inside ml-1">
-          <li>MailerLiteに無料アカウントを作成（500人まで無料）</li>
-          <li>左メニュー「Integrations」→「MailerLite API」</li>
-          <li>「Generate new token」をクリックしてAPIキーを発行</li>
-          <li>発行されたキーを下のフィールドに貼り付け</li>
-          <li>「接続テスト」で動作確認</li>
+          <li>Brevoに無料アカウントを作成（コンタクト無制限・300通/日まで無料）</li>
+          <li>右上のアカウント名 → 「SMTP &amp; API」を開く</li>
+          <li>「API Keys」タブで「Generate a new API key」をクリック</li>
+          <li>キー名を入力（例：デジコラボ）して発行</li>
+          <li>発行されたキーを下のフィールドに貼り付け → 「接続テスト」</li>
         </ol>
         <div className="flex items-center gap-3 mt-3">
           <a
-            href="https://app.mailerlite.com/integrations/api"
+            href="https://app.brevo.com/settings/keys/api"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-sm font-bold text-yellow-800 hover:text-yellow-900"
@@ -89,21 +130,21 @@ export default function Settings({ connection, setConnection, userTier, setUserT
         {showGuide && (
           <div className="mt-3 p-3 bg-white rounded-lg text-xs text-slate-700 space-y-1.5 border border-yellow-200">
             <p>⚠️ APIキーは一度しか表示されません。必ずコピーして保管してください。</p>
-            <p>⚠️ メール本文のHTMLデザイン編集はMailerLite Advancedプラン（$18/月）以上が必要です。無料/Growing Businessプランではこのツールからはデザイン編集できません（MailerLite本体のドラッグ＆ドロップエディタを使ってください）。</p>
-            <p>ℹ️ レート制限: 120リクエスト/分（MailerLite側）</p>
+            <p>ℹ️ Brevoの無料プランでは HTMLテンプレート作成・APIでのメール送信・スケジュール送信すべて利用可能です。</p>
+            <p>ℹ️ 送信には「認証済み送信者」が必要です。接続後、下のセクションから設定してください。</p>
           </div>
         )}
       </div>
 
       {/* API接続 */}
-      <Section icon={Key} title="MailerLite API接続">
+      <Section icon={Key} title="Brevo API接続">
         <Field label="APIキー">
           <div className="relative">
             <input
               type={showKey ? 'text' : 'password'}
               value={apiKeyInput}
               onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder="eyJ0eXAiOiJKV1QiLCJhbGciOi..."
+              placeholder="xkeysib-..."
               className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:border-emerald-500"
               data-api-key-input
             />
@@ -162,13 +203,67 @@ export default function Settings({ connection, setConnection, userTier, setUserT
         <Section icon={CheckCircle2} title="現在の接続状態">
           <dl className="text-sm space-y-2">
             <InfoRow label="アカウント名" value={connection.accountName || '—'} />
+            <InfoRow label="メール" value={connection.email || '—'} />
             <InfoRow label="プラン" value={connection.planName || 'free'} />
-            <InfoRow label="登録者上限" value={`${connection.subscriberLimit?.toLocaleString() || '—'} 人`} />
+            <InfoRow
+              label="クレジット"
+              value={
+                connection.credits != null
+                  ? `${Number(connection.credits).toLocaleString()} ${connection.creditsType || ''}`
+                  : '—'
+              }
+            />
             <InfoRow
               label="最終検証"
               value={connection.lastVerifiedAt ? new Date(connection.lastVerifiedAt).toLocaleString('ja-JP') : '—'}
             />
           </dl>
+        </Section>
+      )}
+
+      {/* 送信者設定（Brevo固有） */}
+      {connection.isConnected && (
+        <Section icon={Mail} title="デフォルト送信者">
+          <div className="text-xs text-slate-500 mb-3">
+            キャンペーン・自動配信で使うデフォルトの送信者を選択します。Brevoで認証済みの送信者のみ表示されます。
+          </div>
+          {loadingSenders ? (
+            <div className="py-4 flex justify-center text-slate-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+            </div>
+          ) : senders.length === 0 ? (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
+              認証済み送信者がまだありません。Brevoで送信元メールアドレスを追加・認証してください。
+              <a
+                href="https://app.brevo.com/senders/list"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 ml-1 font-bold underline"
+              >
+                Brevoで送信者を追加 <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          ) : (
+            <select
+              value={senders.find((s) => s.email === connection.defaultSenderEmail)?.id || ''}
+              onChange={(e) => selectDefaultSender(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
+              data-default-sender
+            >
+              <option value="">送信者を選択...</option>
+              {senders.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} &lt;{s.email}&gt; {s.active ? '' : '（未認証）'}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={loadSenders}
+            className="mt-2 text-xs text-emerald-600 hover:text-emerald-700 font-bold"
+          >
+            再読み込み
+          </button>
         </Section>
       )}
 
@@ -193,13 +288,14 @@ export default function Settings({ connection, setConnection, userTier, setUserT
       )}
 
       {/* 外部リンク集 */}
-      <Section icon={ExternalLink} title="MailerLite 外部リンク">
+      <Section icon={ExternalLink} title="Brevo 外部リンク">
         <div className="space-y-2">
-          <LinkRow href="https://app.mailerlite.com" label="MailerLite ダッシュボード" />
-          <LinkRow href="https://app.mailerlite.com/domains" label="ドメイン認証（送信元メール設定）" />
-          <LinkRow href="https://app.mailerlite.com/subscribers/segments/create" label="セグメント作成" />
-          <LinkRow href="https://app.mailerlite.com/automation/create" label="オートメーション作成" />
-          <LinkRow href="https://developers.mailerlite.com/" label="MailerLite API ドキュメント" />
+          <LinkRow href="https://app.brevo.com" label="Brevo ダッシュボード" />
+          <LinkRow href="https://app.brevo.com/senders/list" label="送信者管理（送信元メール設定）" />
+          <LinkRow href="https://app.brevo.com/senders/domain/list" label="ドメイン認証" />
+          <LinkRow href="https://app.brevo.com/contact/list" label="コンタクトリスト管理" />
+          <LinkRow href="https://app.brevo.com/settings/keys/api" label="APIキー管理" />
+          <LinkRow href="https://developers.brevo.com/" label="Brevo API ドキュメント" />
         </div>
       </Section>
     </div>
