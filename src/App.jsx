@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, Users, FolderTree, Send, BarChart3, Workflow,
   Settings as SettingsIcon, ChevronLeft, ChevronRight, Mail, CheckCircle2, Circle,
+  Loader2,
 } from 'lucide-react'
-import { localStore, isSupabaseMode } from './lib/supabase'
+import { localStore, isSupabaseMode, supabase } from './lib/supabase'
+import { initSSO } from './lib/initSSO'
 import AutoDeliveryPanel from './components/AutoDeliveryPanel'
 import Dashboard from './pages/Dashboard'
 import Subscribers from './pages/Subscribers'
@@ -37,17 +39,112 @@ const DEFAULT_CONNECTION = {
 }
 
 export default function App() {
+  // Supabase Auth セッション管理（SSO対応）
+  const [session, setSession] = useState(null)
+  const [ready, setReady] = useState(!isSupabaseMode) // standaloneなら即ready
+
+  useEffect(() => {
+    if (!isSupabaseMode || !supabase) return
+
+    let intervalId
+    let subscription
+
+    ;(async () => {
+      // 1) 起動時: URLから sso_token / sso_refresh を読み取ってセッション注入
+      await initSSO()
+
+      // 2) 現在のセッション取得
+      const {
+        data: { session: current },
+      } = await supabase.auth.getSession()
+      setSession(current)
+      setReady(true)
+    })()
+
+    // 3) 二重化①: 認証状態変化を検知
+    const sub = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    subscription = sub.data.subscription
+
+    // 4) 二重化②: 60秒ポーリングで失効検知
+    intervalId = setInterval(async () => {
+      const {
+        data: { session: s },
+      } = await supabase.auth.getSession()
+      setSession(s)
+    }, 60_000)
+
+    return () => {
+      if (subscription) subscription.unsubscribe()
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [])
+
+  // 初期化完了待ち
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+      </div>
+    )
+  }
+
+  // Supabaseモードで未ログイン → フロービルダー本体への誘導
+  if (isSupabaseMode && !session) {
+    return <FlowBuilderRedirect />
+  }
+
+  // ログイン済み or スタンドアロンモード → メインアプリ表示
+  return <MainApp session={session} />
+}
+
+function FlowBuilderRedirect() {
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)' }}
+      data-sso-redirect
+    >
+      <div className="text-center max-w-md">
+        <div
+          className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
+          style={{ backgroundColor: '#059669' }}
+        >
+          <Mail className="w-8 h-8 text-white" />
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900 mb-3">デジコラボ メール</h1>
+        <p className="text-slate-600 leading-relaxed mb-6">
+          このアプリはフロービルダーの一部です。
+          <br />
+          フロービルダー本体からアクセスしてください。
+        </p>
+        <a
+          href="https://digicollabo.com"
+          className="inline-flex items-center gap-2 px-6 py-3 text-white rounded-lg font-bold hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: '#059669' }}
+        >
+          フロービルダーを開く
+          <span aria-hidden>↗</span>
+        </a>
+      </div>
+    </div>
+  )
+}
+
+function MainApp({ session }) {
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [collapsed, setCollapsed] = useState(false)
   const [connection, setConnection] = useState(() => ({
     ...DEFAULT_CONNECTION,
     ...localStore.get('connection', {}),
   }))
-  // ティア: Supabase連携モード時は member から（本番は認証で取得）
-  // スタンドアロンモード時は partner（全機能アンロック）
-  const [userTier, setUserTier] = useState(() =>
-    isSupabaseMode ? (localStore.get('userTier', 'member')) : 'partner'
-  )
+
+  // ティア: SSOセッションの user_metadata から判定（本番）
+  // スタンドアロンモードは partner（全機能アンロック）、Supabase連携時のデフォルトは member
+  const [userTier, setUserTier] = useState(() => {
+    if (!isSupabaseMode) return 'partner'
+    const meta = session?.user?.user_metadata || session?.user?.app_metadata || {}
+    return meta.tier || meta.membership_tier || localStore.get('userTier', 'member')
+  })
 
   useEffect(() => {
     localStore.set('connection', connection)
@@ -56,6 +153,14 @@ export default function App() {
   useEffect(() => {
     localStore.set('userTier', userTier)
   }, [userTier])
+
+  // セッションのmetadataが更新された場合にティアを反映
+  useEffect(() => {
+    if (!isSupabaseMode || !session) return
+    const meta = session.user?.user_metadata || session.user?.app_metadata || {}
+    const t = meta.tier || meta.membership_tier
+    if (t && t !== userTier) setUserTier(t)
+  }, [session])
 
   const isConnected = Boolean(connection.apiKey && connection.isConnected)
   const mode = isSupabaseMode ? 'supabase' : 'standalone'
@@ -157,7 +262,7 @@ export default function App() {
                   : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}
             >
-              {mode === 'supabase' ? 'Supabase接続' : 'スタンドアロン'}
+              {mode === 'supabase' ? 'SSO接続' : 'スタンドアロン'}
             </span>
             {/* プランバッジ（Supabase連携時のみ） */}
             {mode === 'supabase' && (

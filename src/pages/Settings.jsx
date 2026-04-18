@@ -271,7 +271,7 @@ export default function Settings({ connection, setConnection, userTier, setUserT
       {isSupabaseMode && (
         <Section icon={Key} title="デジコラボメンバーシップ（開発用）">
           <div className="text-xs text-slate-500 mb-2">
-            ※ 本番環境ではdigicollabo_membersテーブルで自動判定されます。開発確認用の手動切替：
+            ※ 本番環境ではフロービルダーSSOのセッションmetadataから自動判定されます。開発確認用の手動切替：
           </div>
           <select
             value={userTier}

@@ -6,8 +6,17 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const isSupabaseMode = Boolean(url && anonKey)
 
+// 他のデジコラボアプリ（カート/コース/LINE等）とセッションストレージキーが衝突しないよう
+// ユニークなstorageKeyを指定。これにより、アプリ単位でセッションを独立管理できる。
 export const supabase = isSupabaseMode
-  ? createClient(url, anonKey)
+  ? createClient(url, anonKey, {
+      auth: {
+        storageKey: 'sb-digicollab-mail',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false, // SSOで手動制御するため無効化
+      },
+    })
   : null
 
 // ローカルストレージラッパー（standaloneモード用）
