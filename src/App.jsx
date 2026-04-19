@@ -5,7 +5,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { localStore, isSupabaseMode, supabase } from './lib/supabase'
-import { initSSO } from './lib/initSSO'
+import { initSSO, startSessionPolling } from './lib/initSSO'
 import AutoDeliveryPanel from './components/AutoDeliveryPanel'
 import Dashboard from './pages/Dashboard'
 import Subscribers from './pages/Subscribers'
@@ -46,11 +46,12 @@ export default function App() {
   useEffect(() => {
     if (!isSupabaseMode || !supabase) return
 
-    let intervalId
+    let stopPolling = () => {}
     let subscription
 
     ;(async () => {
-      // 1) 起動時: URLから sso_token / sso_refresh を読み取ってセッション注入
+      // 1) 起動時: URLから sso_code / sso_token / sso_refresh を読み取ってセッション注入
+      //    セッション無し時は redirectToHub() が内部で呼ばれる
       await initSSO()
 
       // 2) 現在のセッション取得
@@ -59,23 +60,24 @@ export default function App() {
       } = await supabase.auth.getSession()
       setSession(current)
       setReady(true)
+
+      // 3) セッション監視（共通SSOクライアント版: サインアウト→ハブ誘導、user切替→リロード）
+      if (current) {
+        stopPolling = startSessionPolling(current.user.id)
+      }
     })()
 
-    // 3) 二重化①: 認証状態変化を検知
-    const sub = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
-    subscription = sub.data.subscription
-
-    // 4) 二重化②: 60秒ポーリングで失効検知
-    intervalId = setInterval(async () => {
-      const {
-        data: { session: s },
-      } = await supabase.auth.getSession()
+    // 4) 認証状態変化を検知（ポーリングも再始動）
+    const sub = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s)
-    }, 60_000)
+      stopPolling()
+      stopPolling = s ? startSessionPolling(s.user.id) : () => {}
+    })
+    subscription = sub.data.subscription
 
     return () => {
       if (subscription) subscription.unsubscribe()
-      if (intervalId) clearInterval(intervalId)
+      stopPolling()
     }
   }, [])
 
