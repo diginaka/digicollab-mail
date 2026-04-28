@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Info,
   Zap,
+  Pencil,
   X as XIcon,
 } from 'lucide-react'
 import { supabase, isSupabaseMode } from '../lib/supabase'
@@ -27,6 +28,8 @@ import { useSequenceStatus } from '../hooks/useSequenceStatus'
 import SequenceStatusBadge from '../components/sequences/SequenceStatusBadge'
 import ConfirmActivationModal from '../components/sequences/ConfirmActivationModal'
 import TestSendModal from '../components/sequences/TestSendModal'
+// バグ #4 (2026-04-28): 各通の件名/本文編集モーダル
+import EditStepModal from '../components/sequences/EditStepModal'
 
 /**
  * シーケンス（ステップメール）管理ページ
@@ -60,6 +63,8 @@ export default function Sequences({ isConnected, connection, userTier, setCurren
   const [toastError, setToastError] = useState('')
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [testSendTarget, setTestSendTarget] = useState(null) // { funnelId, stepNumber, subject }
+  // バグ #4: 各通の編集対象 step (generated_step_contents row) と funnelId
+  const [editTarget, setEditTarget] = useState(null) // { step, funnelId }
 
   useEffect(() => {
     if (isConnected) load()
@@ -174,6 +179,16 @@ export default function Sequences({ isConnected, connection, userTier, setCurren
     setToast('')
     setToastError(msg)
   }
+  // バグ #4: 編集保存後はリスト再読込みして最新値を反映
+  const handleEditSaved = ({ stepNumber }) => {
+    setToast(`✓ ${stepNumber}通目を保存しました`)
+    setToastError('')
+    load()
+  }
+  const handleEditError = (msg) => {
+    setToast('')
+    setToastError(`編集の保存に失敗しました: ${msg}`)
+  }
 
   if (!isConnected) return <NotConnected setCurrentPage={setCurrentPage} />
 
@@ -251,13 +266,16 @@ export default function Sequences({ isConnected, connection, userTier, setCurren
                 ? 'ビジネスプロフィールを取得できませんでした'
                 : embeddedStatus === 'empty'
                 ? 'まずフロービルダーでメールを生成してください'
-                : ''
+                : '公開LP からオプトインした人に、このシーケンスを自動配信します'
             }
           >
             <Zap className="w-4 h-4" />
+            {/* バグ #1 関連 (2026-04-28): 達也さん向けに「何が起きるか」明示。
+                旧: 「自動配信として確定」/「自動配信を更新する」
+                新: 「自動配信を有効化する」/「自動配信の設定を更新」 */}
             {embeddedStatus === 'active' || embeddedStatus === 'error'
-              ? '自動配信を更新する'
-              : '自動配信として確定'}
+              ? '自動配信の設定を更新'
+              : '自動配信を有効化する'}
           </button>
         </div>
       )}
@@ -341,6 +359,12 @@ export default function Sequences({ isConnected, connection, userTier, setCurren
                     subject,
                   })
                 }
+                onEdit={(step) =>
+                  setEditTarget({
+                    step,
+                    funnelId: seq.funnel_id,
+                  })
+                }
               />
             ))}
           </div>
@@ -395,6 +419,17 @@ export default function Sequences({ isConnected, connection, userTier, setCurren
           onError={handleTestSendError}
         />
       )}
+
+      {/* バグ #4: メール編集モーダル */}
+      {editTarget && (
+        <EditStepModal
+          step={editTarget.step}
+          funnelId={editTarget.funnelId}
+          onClose={() => setEditTarget(null)}
+          onSaved={handleEditSaved}
+          onError={handleEditError}
+        />
+      )}
     </div>
   )
 }
@@ -414,7 +449,7 @@ function TabButton({ active, onClick, children }) {
   )
 }
 
-function SequenceCard({ sequence, expanded, onToggle, onDelete, canDelete, onTestSend }) {
+function SequenceCard({ sequence, expanded, onToggle, onDelete, canDelete, onTestSend, onEdit }) {
   const stepCount = sequence.steps.length
   // 一覧モード時は SequenceCard 自身が status を取りに行く（埋め込み時の主要アクション帯と二段構え）
   const { status, activeSteps } = useSequenceStatus(sequence.funnel_id)
@@ -484,6 +519,21 @@ function SequenceCard({ sequence, expanded, onToggle, onDelete, canDelete, onTes
                       <CheckCircle2 className="w-3 h-3" />
                       自動配信中
                     </span>
+                  )}
+                  {/* バグ #4: 編集ボタン (常時押下可) */}
+                  {onEdit && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onEdit(step)
+                      }}
+                      title="このメールの件名・本文を編集します"
+                      className="text-[11px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800 inline-flex items-center gap-1"
+                      data-edit-step-trigger={step.step_number}
+                    >
+                      <Pencil className="w-3 h-3" />
+                      編集
+                    </button>
                   )}
                   {onTestSend && (
                     <button

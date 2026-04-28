@@ -131,7 +131,8 @@ export default function ConfirmActivationModal({
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
             <Zap className="w-4 h-4 text-emerald-600" />
-            {isReactivation ? '自動配信を更新する' : 'シーケンスを自動配信に乗せる'}
+            {/* バグ #1 関連 (2026-04-28): 文言を「何が起こるか」にフォーカス */}
+            {isReactivation ? '自動配信の設定を更新' : '自動配信を有効化する'}
           </h3>
           <button
             onClick={onClose}
@@ -150,8 +151,8 @@ export default function ConfirmActivationModal({
           }`}
         >
           {isReactivation
-            ? '現在の自動配信を上書きします。よろしいですか？'
-            : 'このシーケンスを自動配信に乗せます。新規購読者に自動でメールが届くようになります。'}
+            ? '現在の自動配信を新しい内容で上書きします。次回のオプトインから新しい内容で配信されます。'
+            : '公開LP からオプトインした方に、このシーケンスを自動でお届けします。1通目は配信間隔ぶん経過後に送信されます。'}
         </div>
 
         <div className="space-y-2 mb-4">
@@ -234,7 +235,8 @@ export default function ConfirmActivationModal({
             ) : (
               <>
                 <Zap className="w-4 h-4" />
-                {isReactivation ? '更新する' : '確定する'}
+                {/* バグ #1 関連 (2026-04-28): 「確定」→「有効化」で意図明示 */}
+                {isReactivation ? '更新する' : '有効化する'}
               </>
             )}
           </button>
