@@ -24,6 +24,10 @@ import { useFlowContext } from '../hooks/useFlowContext'
 import { useGeneratedContents } from '../hooks/useGeneratedContents'
 import { useAutoDeliverySetup } from '../hooks/useAutoDeliverySetup'
 import { useScheduledDelivery } from '../hooks/useScheduledDelivery'
+// バグ #1 対応: 公開LPオプトイン自動配信 (fb_optin_email_sequences) も同時 UPSERT する
+// ため、ログイン中ユーザーの business_profile_id を取得する。
+import { useCurrentUser } from '../hooks/useCurrentUser'
+import { useBusinessProfile } from '../hooks/useBusinessProfile'
 import { listLists, getListContacts } from '../lib/brevo'
 
 export default function AutoDeliveryPanel({ connection, isConnected }) {
@@ -36,6 +40,9 @@ export default function AutoDeliveryPanel({ connection, isConnected }) {
     hasActiveDelivery,
     refresh: refreshQueue,
   } = useScheduledDelivery(funnelId)
+  // バグ #1: 自動配信トリガー UPSERT に必要な business_profile_id
+  const { email: currentUserEmail } = useCurrentUser()
+  const { profileId: businessProfileId } = useBusinessProfile(currentUserEmail)
 
   const [expanded, setExpanded] = useState(true)
   const [lists, setLists] = useState([])
@@ -116,6 +123,9 @@ export default function AutoDeliveryPanel({ connection, isConnected }) {
     await setup({
       funnelId,
       funnelName,
+      // バグ #1: ログインユーザーの business_profile_id を渡し、
+      // fb_optin_email_sequences に同時 UPSERT する
+      businessProfileId,
       recipients,
       steps: contents,
       baseDate: new Date(startDate),
@@ -302,12 +312,25 @@ export default function AutoDeliveryPanel({ connection, isConnected }) {
                   <CheckCircle2 className="w-4 h-4 inline mr-1" />
                   {result.successCount.toLocaleString()}件の予約配信をセットアップしました。
                   指定日時にBrevoから自動送信されます。
+                  {/* バグ #1: 自動配信トリガーの登録結果も明示 */}
+                  {result.optinSequenceUpserted > 0 && (
+                    <>
+                      <br />
+                      新規オプトイン者向け自動配信も {result.optinSequenceUpserted} 通登録しました。
+                    </>
+                  )}
                 </Notice>
               )}
               {result && !result.ok && (
                 <Notice type="warning">
                   成功 {result.successCount.toLocaleString()}件 / 失敗 {result.failedCount.toLocaleString()}件。
                   詳細はシーケンス画面の配信キューで確認できます。
+                  {result.optinSequenceError && (
+                    <>
+                      <br />
+                      新規オプトイン用自動配信の登録に失敗: {result.optinSequenceError}
+                    </>
+                  )}
                 </Notice>
               )}
 
