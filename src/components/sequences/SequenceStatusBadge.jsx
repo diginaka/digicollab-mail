@@ -3,28 +3,38 @@
 //   draft  : 🟡 下書き      (amber)
 //   error  : 🔴 配信エラー  (red)
 //   empty  : ⚪ 未生成      (slate)
+//
+// Phase B.6 hotfix (2026-05-02): 達也さん UI テストで「目視ではわからない」状態を解消。
+// 旧来の bg-*-100 + text-*-700 は Phase B 拡張版で全体が薄い緑系背景 (#F8FAF9 = digi-bg)
+// になった結果、text-[10px] の極小バッジで視認困難になった。
+// 修正方針:
+//   - text 色を -700 → -900 (より濃く)
+//   - border 色を -200 → -300 (定義をはっきりさせる)
+//   - empty の bg を -100 → -200 (背景と差をつける)
+//   - sm サイズを text-[10px] → text-[11px] + font-bold (極小でも読める)
+//   - line 側 SequenceStatusBadge.jsx と完全同一デザイン (mail/LINE 統一)
 import { Zap, FileEdit, AlertTriangle, CircleDashed } from 'lucide-react'
 
 const STATUS_MAP = {
   active: {
     label: '自動配信中',
     icon: Zap,
-    cls: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    cls: 'bg-emerald-100 text-emerald-900 border-emerald-300',
   },
   draft: {
     label: '下書き',
     icon: FileEdit,
-    cls: 'bg-amber-100 text-amber-700 border-amber-200',
+    cls: 'bg-amber-100 text-amber-900 border-amber-300',
   },
   error: {
     label: '配信エラー',
     icon: AlertTriangle,
-    cls: 'bg-red-100 text-red-700 border-red-200',
+    cls: 'bg-red-100 text-red-900 border-red-300',
   },
   empty: {
     label: '未生成',
     icon: CircleDashed,
-    cls: 'bg-slate-100 text-slate-500 border-slate-200',
+    cls: 'bg-slate-200 text-slate-700 border-slate-400',
   },
 }
 
@@ -33,7 +43,7 @@ export default function SequenceStatusBadge({ status = 'empty', size = 'md' }) {
   const Icon = def.icon
   const sizeCls =
     size === 'sm'
-      ? 'text-[10px] px-1.5 py-0.5 gap-1'
+      ? 'text-[11px] px-2 py-0.5 gap-1 font-bold'
       : size === 'lg'
       ? 'text-sm px-3 py-1.5 gap-1.5 font-bold'
       : 'text-xs px-2 py-1 gap-1.5 font-bold'
