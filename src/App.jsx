@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, Users, FolderTree, Send, BarChart3, Workflow,
-  Settings as SettingsIcon, ChevronLeft, ChevronRight, Mail, CheckCircle2, Circle,
-  Loader2,
+  Settings as SettingsIcon, Loader2,
 } from 'lucide-react'
 import { localStore, isSupabaseMode, supabase } from './lib/supabase'
 import { initSSO, startSessionPolling } from './lib/initSSO'
@@ -84,8 +83,8 @@ export default function App() {
   // 初期化完了待ち
   if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+      <div className="min-h-screen flex items-center justify-center bg-digi-bg">
+        <Loader2 className="w-6 h-6 animate-spin text-digi-green" />
       </div>
     )
   }
@@ -102,27 +101,18 @@ export default function App() {
 function FlowBuilderRedirect() {
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-4"
-      style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)' }}
+      className="min-h-screen flex items-center justify-center px-4 bg-digi-bg"
       data-sso-redirect
     >
       <div className="text-center max-w-md">
-        <div
-          className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-          style={{ backgroundColor: '#059669' }}
-        >
-          <Mail className="w-8 h-8 text-white" />
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-3">デジコラボ メール</h1>
-        <p className="text-slate-600 leading-relaxed mb-6">
+        <p className="text-digi-text-muted leading-relaxed mb-6">
           このアプリはフロービルダーの一部です。
           <br />
           フロービルダー本体からアクセスしてください。
         </p>
         <a
           href="https://digicollabo.com"
-          className="inline-flex items-center gap-2 px-6 py-3 text-white rounded-lg font-bold hover:opacity-90 transition-opacity"
-          style={{ backgroundColor: '#059669' }}
+          className="inline-flex items-center gap-2 px-6 py-3 text-white rounded-lg font-bold hover:opacity-90 transition-opacity bg-digi-green"
         >
           フロービルダーを開く
           <span aria-hidden>↗</span>
@@ -134,7 +124,6 @@ function FlowBuilderRedirect() {
 
 function MainApp({ session }) {
   const [currentPage, setCurrentPage] = useState('dashboard')
-  const [collapsed, setCollapsed] = useState(false)
   const [connection, setConnection] = useState(() => ({
     ...DEFAULT_CONNECTION,
     ...localStore.get('connection', {}),
@@ -165,7 +154,6 @@ function MainApp({ session }) {
   }, [session])
 
   const isConnected = Boolean(connection.apiKey && connection.isConnected)
-  const mode = isSupabaseMode ? 'supabase' : 'standalone'
 
   const pageProps = {
     isConnected,
@@ -191,27 +179,16 @@ function MainApp({ session }) {
     ),
   }
 
+  // Phase B 拡張版: ホワイトラベル化 + 細サイドバー (アイコンのみ + ホバー tooltip) +
+  // 右上 🟢 ステータスドット 1 個。ブランド名 + ロゴ画像撤去。
   return (
     <div className="app-container">
-      {/* サイドバー */}
+      {/* 細サイドバー (w-14、アイコンのみ、ホバー tooltip) */}
       <aside
-        className={`${collapsed ? 'w-16' : 'w-60'} transition-all duration-200 flex flex-col`}
-        style={{ backgroundColor: '#0f2e24' }}
+        className="w-14 flex flex-col bg-digi-sidebar"
       >
-        <div className="h-16 flex items-center px-4 border-b border-white/10">
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-            style={{ backgroundColor: '#059669' }}
-          >
-            <Mail className="w-5 h-5 text-white" />
-          </div>
-          {!collapsed && (
-            <div className="ml-3 min-w-0">
-              <div className="text-white font-bold text-sm truncate">デジコラボ メール</div>
-              <div className="text-white/50 text-[10px]">Brevo連携</div>
-            </div>
-          )}
-        </div>
+        {/* スペーサー (上部 align、ロゴ + ブランド名は撤去 = ホワイトラベル化) */}
+        <div className="h-12 border-b border-white/10" aria-hidden />
 
         <nav className="flex-1 py-3 space-y-1">
           {NAV.map((item) => {
@@ -220,77 +197,48 @@ function MainApp({ session }) {
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => setCurrentPage(item.id)}
-                className={`w-full flex items-center px-4 py-2.5 text-sm transition-colors ${
-                  active ? 'text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
-                }`}
-                style={
+                title={item.label}
+                aria-label={item.label}
+                className={`w-full h-10 flex items-center justify-center transition-colors ${
                   active
-                    ? { backgroundColor: 'rgba(5, 150, 105, 0.2)', borderLeft: '3px solid #059669' }
-                    : { borderLeft: '3px solid transparent' }
-                }
+                    ? 'text-white bg-white/10 border-l-[3px] border-digi-green-light'
+                    : 'text-white/55 hover:text-white hover:bg-white/5 border-l-[3px] border-transparent'
+                }`}
                 data-nav={item.id}
               >
-                <Icon className="w-5 h-5 shrink-0" />
-                {!collapsed && <span className="ml-3 truncate">{item.label}</span>}
+                <Icon className="w-5 h-5" />
               </button>
             )
           })}
         </nav>
-
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="h-12 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 border-t border-white/10"
-        >
-          {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
-        </button>
       </aside>
 
       {/* メインコンテンツ */}
       <div className="main-content">
-        {/* ヘッダー */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
-          <div>
-            <h1 className="text-lg font-bold text-slate-800">
-              {NAV.find((n) => n.id === currentPage)?.label}
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* モードバッジ */}
+        {/* 薄ヘッダー: 右上 🟢 ステータスドット 1 個のみ */}
+        <header className="h-12 bg-white border-b border-digi-border flex items-center justify-between px-4 shrink-0">
+          <h1 className="text-sm font-semibold text-digi-text">
+            {NAV.find((n) => n.id === currentPage)?.label}
+          </h1>
+          {/* 右上 🟢 ステータスドット (接続/未接続のみ) */}
+          <span
+            className="flex items-center gap-1.5 text-xs text-digi-text-muted"
+            data-connection-status
+            title={
+              isConnected
+                ? `Brevo 接続済${connection.accountName ? ` (${connection.accountName})` : ''}`
+                : 'Brevo 未接続'
+            }
+          >
             <span
-              className={`text-xs px-2.5 py-1 rounded-full border ${
-                mode === 'supabase'
-                  ? 'bg-blue-50 text-blue-700 border-blue-200'
-                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              className={`w-2 h-2 rounded-full ${
+                isConnected ? 'bg-digi-green-light' : 'bg-digi-text-muted/40'
               }`}
-            >
-              {mode === 'supabase' ? 'SSO接続' : 'スタンドアロン'}
-            </span>
-            {/* プランバッジ（Supabase連携時のみ） */}
-            {mode === 'supabase' && (
-              <span className="text-xs px-2.5 py-1 rounded-full border bg-purple-50 text-purple-700 border-purple-200">
-                {userTier}
-              </span>
-            )}
-            {/* 接続ステータス */}
-            <span
-              className={`text-xs px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${
-                isConnected
-                  ? 'bg-green-50 text-green-700 border-green-200'
-                  : 'bg-slate-50 text-slate-600 border-slate-200'
-              }`}
-              data-connection-status
-            >
-              {isConnected ? (
-                <CheckCircle2 className="w-3 h-3" />
-              ) : (
-                <Circle className="w-3 h-3" />
-              )}
-              {isConnected
-                ? `Brevo接続済 ${connection.accountName ? `(${connection.accountName})` : ''}`
-                : 'Brevo未接続'}
-            </span>
-          </div>
+              aria-hidden
+            />
+          </span>
         </header>
 
         {/* 自動配信パネル（フロービルダーから開かれた時のみ表示） */}
